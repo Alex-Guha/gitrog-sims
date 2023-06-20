@@ -173,7 +173,7 @@ def sim(landsInLib, libSize, trigs):
         succ += handle_dredge(lib.copy(), trigs, landsInLib, libSize)
 
     # Return the success rate as a percentage
-    return succ / 1000
+    return round(succ / 1000, 1)
 
 
 # Accepts a range of lands remaining in the deck, number of draw triggers we can generate separately, and library size
