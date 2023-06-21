@@ -2,7 +2,6 @@
 
 import random
 import tqdm
-from collections import Counter
 
 landsInLib = 0
 libSize = 0
@@ -62,7 +61,7 @@ def handle_dredge(lib, trigs):
         lib, trig, found = dredge(6, lib)
 
         if len(found) > 0 and found[0] == 'dakmor':
-            return 0
+            return 1
 
         elif 'loam' in found:
             found_loam = True
@@ -72,35 +71,17 @@ def handle_dredge(lib, trigs):
         if 'shuffler' in found and not first_shuffler_found:
             first_shuffler_found = True
 
-        if len(lib) == 6 or len(lib) == 7:
-            print('draw case')
+        # TODO If there are > 40 cards in library, we can continue dredging after hitting the second shuffler. This consumes a draw trigger, and if we get down to libsize < 5, we draw instead of dredging
+        if 'shuffler' in found and first_shuffler_found:
             found_loam = False
             first_shuffler_found = False
-
-            # If we hit a land off the last mill, draw one.
-            if trig > 0:
-                trigs -= 1
-                card = lib.pop(0)
-                if card == 'dakmor':
-                    return 0
-                elif card == 'land':
-                    trigs += 1
-                    starting_trigs += 1
-                    landsInLib -= 1
-                    libSize -= 1
-                elif card == 'nonland':
-                    libSize -= 1
-                elif card == 'loam':
-                    found_loam = True
-                    libSize -= 1
-                # TODO Account for drawing a shuffler here (modify how createLib works)
-
             lib = createLib(landsInLib, libSize)
             random.shuffle(lib)
             continue
 
         # got through whole library
         if len(lib) < 6:
+            print('got through lib')
 
             # This is the only case where you would dredge loam
             if trigs > 0 and len(lib) == 5 and found_loam:
@@ -113,27 +94,26 @@ def handle_dredge(lib, trigs):
                         instances_of_shuffler += 1
 
                 # There is a shuffler in the next 2 cards
-                if len(found) > 0 and found[0] == 'dakmor' and instances_of_shuffler != 2 and not first_shuffler_found:
-                    return 0
+                if found[0] == 'dakmor' and instances_of_shuffler != 2 and not first_shuffler_found:
+                    return 1
 
+                # TODO count lands to determine if we should shuffle or take dakmor.
                 # If there is a land in the last 2, we cannot take dakmor or we mill ourselves
-                elif len(found) > 0 and found[0] == 'dakmor' and instances_of_shuffler == 2:
-                    if 'land' in lib:
-                        return 1
-                    else:
-                        return 0
+                elif found[0] == 'dakmor' and instances_of_shuffler == 2:
+                    return 1
 
                 # Dakmor is in the last two, risk it for the draw
                 elif instances_of_shuffler > 0 and trig == 1:
                     if trigs > 0:
-                        return 0
+                        return 1
                     trig -= 1
                     card = lib.pop(0)
                     if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return 0
+                        return 1
                     elif card == 'land':  # Found new fodder to discard
-                        return 0
-                    return 2  # Out of draws
+                        return 1
+                    print('failstate')
+                    return 0  # Out of draws
 
                 # Dakmor is in the last two but we must shuffle
                 elif instances_of_shuffler > 0 and trig == 0:
@@ -141,22 +121,24 @@ def handle_dredge(lib, trigs):
                         trigs -= 1
                         card = lib.pop(0)
                         if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                            return 0
+                            return 1
                         elif card == 'land':  # Found new fodder to discard
-                            return 0
+                            return 1
                         if trigs > 0:
-                            return 0
-                    return 3  # Out of draws
+                            return 1
+                    print('failstate')
+                    return 0  # Out of draws
 
                 # The last shuffler and dakmor are the last 2 cards, risk it for the draw
                 elif instances_of_shuffler == 0 and trig == 1:
                     if trigs > 0:
-                        return 0
+                        return 1
                     trig -= 1
                     card = lib.pop(0)
                     if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return 0
-                    return 4  # Out of draws
+                        return 1
+                    print('failstate')
+                    return 0  # Out of draws
 
                 # The last shuffler and dakmor are the last 2 cards, but there's nothing we can do
                 elif instances_of_shuffler == 0 and trig == 0:
@@ -164,38 +146,13 @@ def handle_dredge(lib, trigs):
                         trigs -= 1
                         card = lib.pop(0)
                         if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                            return 0
+                            return 1
                         elif card == 'land':  # Found new fodder to discard
-                            return 0
+                            return 1
                         if trigs > 0:
-                            return 0
-                    return 5  # Out of draws
-
-            elif first_shuffler_found:
-                found_loam = False
-                first_shuffler_found = False
-
-                # If we hit a land off the last mill, draw one.
-                if trig > 0:
-                    trigs -= 1
-                    card = lib.pop(0)
-                    if card == 'dakmor':
-                        return 0
-                    elif card == 'land':
-                        trigs += 1
-                        starting_trigs += 1
-                        landsInLib -= 1
-                        libSize -= 1
-                    elif card == 'nonland':
-                        libSize -= 1
-                    elif card == 'loam':
-                        found_loam = True
-                        libSize -= 1
-                    # TODO Account for drawing a shuffler here (modify how createLib works)
-
-                lib = createLib(landsInLib, libSize)
-                random.shuffle(lib)
-                continue
+                            return 1
+                    print('failstate')
+                    return 0  # Out of draws
 
             elif trigs > 0:  # If we do not have loam, draw one
                 while trigs > 0:
@@ -203,42 +160,33 @@ def handle_dredge(lib, trigs):
 
                     card = lib.pop(0)
                     if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return 0
+                        return 1
                     elif card == 'land':  # Found new fodder to discard
                         trigs += 1
                     # If hit shuffler or nonland, do nothing
-                return 6  # Out of draws
+                print('failstate')
+                return 0  # Out of draws
 
-    return 7  # failed
+    return 0  # failed
 
 
 # Accepts a number of lands in the library, size of the library, and number of triggers we can generate
-def sim(trigs, originalLibSize, originalLandCount):
-    global landsInLib
-    global libSize
+def sim(trigs):
     succ = 0
-    fails = []
 
     # Creates the library as a shuffled array containing 'l' for land, 'd' for dakmor, and 'n' for nonland
     lib = createLib(landsInLib, libSize)
 
     # Run the simulation 1000 times
-    for i in range(1000000):
-        libSize = originalLibSize
-        landsInLib = originalLandCount
+    for _ in range(1000):
 
         random.shuffle(lib)
 
         # Sum the number of times the sim hit dakmor
-        result = handle_dredge(lib.copy(), trigs)
-
-        if result == 0:
-            succ += 1
-        else:
-            fails.append(result)
+        succ += handle_dredge(lib.copy(), trigs)
 
     # Return the success rate as a percentage
-    return round(succ / 10000, 1), fails
+    return round(succ / 10, 1)
 
 
 # Accepts a range of lands remaining in the deck, number of draw triggers we can generate separately, and library size
@@ -246,23 +194,17 @@ def ggt(minLands, maxLands, minTriggers, maxTriggers, librarySize):
     global landsInLib
     global libSize
     result = []
-    fails = []
     libSize = librarySize
 
     for numLands in tqdm.tqdm(range(minLands, maxLands)):
-
+        landsInLib = numLands
         # Used to display the "numLands: "
         result.append([str(numLands) + ":  "])
 
         # We can restart the dredging with draw triggers we generate, if we hit no lands on a mill.
         # The number of such triggers we can generate is this range.
         for triggers in range(minTriggers, maxTriggers):
-            libSize = librarySize
-            landsInLib = numLands
-
-            simResult, simFails = sim(triggers, librarySize, numLands)
-            fails += simFails
-            result[numLands - minLands].append(simResult)
+            result[numLands - minLands].append(sim(triggers))
 
     # Display the results
     titleString = "Trigs:  "
@@ -272,19 +214,11 @@ def ggt(minLands, maxLands, minTriggers, maxTriggers, librarySize):
     print('\n'.join(
         [' '.join([str('{:5}').format(item) for item in row])for row in result]))
 
-    # Print failure cases
-    type_counts = Counter(fails)
-    labels = list(type_counts.keys())
-    values = list(type_counts.values())
-    labels.reverse()
-    values.reverse()
-
-    for i, label in enumerate(labels):
-        print(f'Failure type: {label}, Occurrances: {values[i]}')
-
     return result
 
 
 if __name__ == "__main__":
     # PARAMETERS - Change these to simulate whatever scenario you like
-    ggt(15, 31, 1, 4, 80)
+    ggt(15, 31, 1, 5, 80)
+    ggt(15, 31, 1, 5, 80)
+    ggt(15, 31, 1, 5, 80)
