@@ -20,9 +20,6 @@ def dredge(amt, lib):
         elif card == "land":  # found a land
             trig = 1
 
-        elif card == 'loam':
-            found.append('loam')
-
         elif card == 'shuffler':
             found.append('shuffler')
 
@@ -34,11 +31,9 @@ def createLib(lands, size):
     for i in range(lands):  # add the requisite number of lands
         lib.append("land")
     lib.append("dakmor")  # add dakmor
-    lib.append("shuffler")  # add 2 shufflers
-    lib.append("shuffler")
-    lib.append("loam")
-    # number of cards in library - number of lands - 4 for dakmor, 2 shufflers, and loam
-    for j in range(size - lands - 4):
+    lib.append("shuffler")  # add 1 shuffler
+    # number of cards in library - number of lands - 2 for dakmor and 1 shuffler
+    for j in range(size - lands - 2):
         lib.append("nonland")
     return lib
 
@@ -48,7 +43,6 @@ def handle_dredge(lib, trigs):
     global landsInLib
     global libSize
     starting_trigs = trigs
-    found_loam = False
     first_shuffler_found = False
 
     while trigs > 0:  # while you still have a draw trigger
@@ -59,22 +53,18 @@ def handle_dredge(lib, trigs):
             landsInLib += 1
             libSize += 1
 
-        lib, trig, found = dredge(6, lib)
+        lib, trig, found = dredge(5, lib)
 
         if len(found) > 0 and found[0] == 'dakmor':
             return 0
-
-        elif 'loam' in found:
-            found_loam = True
 
         trigs += trig  # add a trigger if we hit a land
 
         if 'shuffler' in found and not first_shuffler_found:
             first_shuffler_found = True
 
-        if len(lib) == 6 or len(lib) == 7:
+        if len(lib) == 5 or len(lib) == 6:
             print('draw case')
-            found_loam = False
             first_shuffler_found = False
 
             # If we hit a land off the last mill, draw one.
@@ -90,9 +80,6 @@ def handle_dredge(lib, trigs):
                     libSize -= 1
                 elif card == 'nonland':
                     libSize -= 1
-                elif card == 'loam':
-                    found_loam = True
-                    libSize -= 1
                 # TODO Account for drawing a shuffler here (modify how createLib works)
 
             lib = createLib(landsInLib, libSize)
@@ -100,79 +87,9 @@ def handle_dredge(lib, trigs):
             continue
 
         # got through whole library
-        if len(lib) < 6:
+        if len(lib) < 5:
 
-            # This is the only case where you would dredge loam
-            if trigs > 0 and len(lib) == 5 and found_loam:
-                trigs -= 1
-                lib, trig, found = dredge(3, lib)  # Dredge Loam
-
-                instances_of_shuffler = 0
-                for item in found:
-                    if item == 'shuffler':
-                        instances_of_shuffler += 1
-
-                # There is a shuffler in the next 2 cards
-                if len(found) > 0 and found[0] == 'dakmor' and instances_of_shuffler != 2 and not first_shuffler_found:
-                    return 0
-
-                # If there is a land in the last 2, we cannot take dakmor or we mill ourselves
-                elif len(found) > 0 and found[0] == 'dakmor' and instances_of_shuffler == 2:
-                    if 'land' in lib:
-                        return 1
-                    else:
-                        return 0
-
-                # Dakmor is in the last two, risk it for the draw
-                elif instances_of_shuffler > 0 and trig == 1:
-                    if trigs > 0:
-                        return 0
-                    trig -= 1
-                    card = lib.pop(0)
-                    if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return 0
-                    elif card == 'land':  # Found new fodder to discard
-                        return 0
-                    return 2  # Out of draws
-
-                # Dakmor is in the last two but we must shuffle
-                elif instances_of_shuffler > 0 and trig == 0:
-                    if trigs > 0:
-                        trigs -= 1
-                        card = lib.pop(0)
-                        if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                            return 0
-                        elif card == 'land':  # Found new fodder to discard
-                            return 0
-                        if trigs > 0:
-                            return 0
-                    return 3  # Out of draws
-
-                # The last shuffler and dakmor are the last 2 cards, risk it for the draw
-                elif instances_of_shuffler == 0 and trig == 1:
-                    if trigs > 0:
-                        return 0
-                    trig -= 1
-                    card = lib.pop(0)
-                    if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return 0
-                    return 4  # Out of draws
-
-                # The last shuffler and dakmor are the last 2 cards, but there's nothing we can do
-                elif instances_of_shuffler == 0 and trig == 0:
-                    if trigs > 0:
-                        trigs -= 1
-                        card = lib.pop(0)
-                        if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                            return 0
-                        elif card == 'land':  # Found new fodder to discard
-                            return 0
-                        if trigs > 0:
-                            return 0
-                    return 5  # Out of draws
-
-            elif first_shuffler_found:
-                found_loam = False
+            if first_shuffler_found:
                 first_shuffler_found = False
 
                 # If we hit a land off the last mill, draw one.
@@ -187,9 +104,6 @@ def handle_dredge(lib, trigs):
                         landsInLib -= 1
                         libSize -= 1
                     elif card == 'nonland':
-                        libSize -= 1
-                    elif card == 'loam':
-                        found_loam = True
                         libSize -= 1
                     # TODO Account for drawing a shuffler here (modify how createLib works)
 
