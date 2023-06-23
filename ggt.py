@@ -2,15 +2,17 @@
 # Be warned, ye who enter: This has outgrown me and desparately needs refactoring.
 
 from random import shuffle
+from multiprocessing import Pool
 from time import time
 from tqdm import tqdm
 from collections import Counter
+from itertools import repeat
 
 # Hyperparameters
 # The ratio of (lands in library / library size) where shuffling at the second shuffler is better than continuing to mill past
 land_lib_ratio = 0.1
 # The number of sims to use to generate each number
-sim_count = 10000
+sim_count = 100000
 # This sets the number of cards left in library at which we shuffle if we hit a shuffler
 shuffle_if_under = 7
 
@@ -386,7 +388,6 @@ def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
     result = []
     fails = []
 
-    # TODO Add multithreading
     for i, landRatio in enumerate(landRatioList):
         numLands = round(landRatio * librarySize)
 
@@ -403,7 +404,7 @@ def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
             fails += simFails
             result[i].append(simResult)
 
-    return result, fails, len(landRatioList) * (maxTriggers - minTriggers) * sim_count
+    return (result, fails, len(landRatioList) * (maxTriggers - minTriggers) * sim_count)
 
 
 def display_results(results, fails, total_sim_count, landRatioList, minTriggers=1, maxTriggers=4):
@@ -428,19 +429,24 @@ def display_results(results, fails, total_sim_count, landRatioList, minTriggers=
 
     for label, value in sorted(zip(labels, values)):
         print(f'Failure type: {label},\t' +
-              f'Occurrence frequency: {round(value * 100 / total_sim_count, 2)}, \t' +
+              f'Occurrence frequency: {round(value * 100 / total_sim_count, 2)},  \t' +
               f'Count (out of {total_sim_count:,}): {value:,}')
 
 
 def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1, maxTriggers=4):
-    results, fails, _ = ggt(landRatioList, minTriggers,
-                            maxTriggers, maxLibrary)
-    for librarySize in tqdm(range(minLibrary, maxLibrary, 1)):
-        # for librarySize in range(minLibrary, maxLibrary, 1):
-        result, fail, _ = ggt(landRatioList, minTriggers,
-                              maxTriggers, librarySize)
-        fails += fail
-        for row_index, row in enumerate(result):
+    inputs = []
+    for librarySize in range(minLibrary, maxLibrary + 1, 1):
+        inputs.append((landRatioList, minTriggers, maxTriggers, librarySize))
+
+    with Pool(processes=len(inputs)) as pool:
+        ggt_results = pool.starmap(ggt, inputs)
+
+    results = ggt_results[0][0]
+    fails = ggt_results[0][1]
+
+    for result in ggt_results[1:]:
+        fails += result[1]
+        for row_index, row in enumerate(result[0]):
             for col_index, value in enumerate(row):
                 if col_index == 0:
                     continue
@@ -457,7 +463,6 @@ def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1
 
 
 if __name__ == "__main__":
-    # sim_count = 1000000
     landRatioList = []
 
     for librarySize in range(22, 29):
@@ -468,5 +473,5 @@ if __name__ == "__main__":
         landRatioList, 65, 85)
 
     print(
-        f'\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time() - startTime, 2)} secs.\n')
+        f'This is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time() - startTime, 2)} secs.\n')
     display_results(results, fails, total_sim_count, landRatioList)
