@@ -1,9 +1,12 @@
-# some parts co-opted from Spleenface
+# initial ideas co-opted from Spleenface's sim
+# Be warned, ye who enter: This has outgrown me and desparately needs refactoring.
 
 import random
+import time
 import tqdm
 from collections import Counter
 
+# Global parameters used by the program
 landsInLib = 0
 libSize = 0
 
@@ -12,6 +15,8 @@ libSize = 0
 land_lib_ratio = 0.1
 # The number of sims to use to generate each number
 sim_count = 10000
+# This sets the number of cards left in library at which we shuffle if we hit a shuffler
+shuffle_if_under = 0
 
 
 def dredge(amt, lib):
@@ -81,10 +86,18 @@ def handle_dredge(lib, trigs):
         if 'shuffler' in found and first_shuffler_found:
             second_shuffler_found = True
 
-        # TODO Vary the ratio and see how percentages are impacted
         if 'shuffler' in found and first_shuffler_found and lib.count('land') / len(lib) < land_lib_ratio:
             found_loam = False
             first_shuffler_found = False
+            second_shuffler_found = False
+            lib = createLib(landsInLib, libSize)
+            random.shuffle(lib)
+            continue
+
+        if 'shuffler' in found and len(lib) <= shuffle_if_under:
+            found_loam = False
+            first_shuffler_found = False
+            second_shuffler_found = False
             lib = createLib(landsInLib, libSize)
             random.shuffle(lib)
             continue
@@ -92,6 +105,7 @@ def handle_dredge(lib, trigs):
         if len(lib) == 6 or len(lib) == 7:
             found_loam = False
             first_shuffler_found = False
+            second_shuffler_found = False
 
             # If we hit a land off the last mill, draw one.
             if trig > 0:
@@ -162,6 +176,7 @@ def handle_dredge(lib, trigs):
                             else:
                                 found_loam = False
                                 first_shuffler_found = False
+                                second_shuffler_found = False
                                 lib = createLib(landsInLib, libSize)
                                 random.shuffle(lib)
                                 continue
@@ -228,6 +243,7 @@ def handle_dredge(lib, trigs):
                             else:
                                 found_loam = False
                                 first_shuffler_found = False
+                                second_shuffler_found = False
                                 lib = createLib(landsInLib, libSize)
                                 random.shuffle(lib)
                                 continue
@@ -276,6 +292,7 @@ def handle_dredge(lib, trigs):
             elif first_shuffler_found:
                 found_loam = False
                 first_shuffler_found = False
+                second_shuffler_found = False
 
                 # If we hit a land off the last mill, we must draw one to continue.
                 if trig > 0:
@@ -345,7 +362,7 @@ def sim(trigs, originalLibSize, originalLandCount):
 
 
 # Accepts a range of lands remaining in the deck, number of draw triggers we can generate separately, and library size
-def ggt(minLands, maxLands, minTriggers, maxTriggers, librarySize):
+def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
     global landsInLib
     global libSize
     result = []
@@ -353,10 +370,11 @@ def ggt(minLands, maxLands, minTriggers, maxTriggers, librarySize):
     libSize = librarySize
 
     # for numLands in tqdm.tqdm(range(minLands, maxLands)):
-    for numLands in range(minLands, maxLands):
+    for i, landRatio in enumerate(landRatioList):
+        numLands = round(landRatio * librarySize)
 
         # Used to display the "numLands: "
-        result.append([str(numLands) + ":  "])
+        result.append([f"{round(landRatio, 2)}:  "])
 
         # We can restart the dredging with draw triggers we generate, if we hit no lands on a mill.
         # The number of such triggers we can generate is this range.
@@ -366,18 +384,24 @@ def ggt(minLands, maxLands, minTriggers, maxTriggers, librarySize):
 
             simResult, simFails = sim(triggers, librarySize, numLands)
             fails += simFails
-            result[numLands - minLands].append(simResult)
+            result[i].append(simResult)
 
-    return result, fails, (maxLands - minLands) * (maxTriggers - minTriggers) * sim_count
+    return result, fails, len(landRatioList) * (maxTriggers - minTriggers) * sim_count
 
 
-def display_results(results, fails, total_sim_count, minTriggers=1, maxTriggers=4):
-    titleString = "Trigs:  "
+def display_results(results, fails, total_sim_count, landRatios, minTriggers=1, maxTriggers=4):
+    titleString = "Trigs:\t  "
     for triggers in range(minTriggers, maxTriggers):  # Create title string
         titleString = titleString + str(triggers) + "     "
+
     print(titleString)
     print('\n'.join(
         [' '.join([str('{:5}').format(item) for item in row]) for row in results]))
+    print(f'The first column is the (land count / library size) ratio.\n' +
+          f'I.e. for the max land ratio, 85 * {round(landRatios[0], 2)} = {round(landRatios[0]*85)} lands ' +
+          f'and 65 * {round(landRatios[0], 2)} = {round(landRatios[0]*65)} lands.\n' +
+          f'For the min land ratio, 85 * {round(landRatios[1], 2)} = {round(landRatios[1]*85)} lands ' +
+          f'and 65 * {round(landRatios[1], 2)} = {round(landRatios[1]*65)} lands.\n')
 
     type_counts = Counter(fails)
     labels = list(type_counts.keys())
@@ -389,11 +413,12 @@ def display_results(results, fails, total_sim_count, minTriggers=1, maxTriggers=
               f'Count (out of {total_sim_count:,}): {value:,}')
 
 
-def sim_multiple_deck_sizes(minLands, maxLands, minLibrary, maxLibrary, minTriggers=1, maxTriggers=4):
-    results, fails, _ = ggt(minLands, maxLands, minTriggers,
+def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1, maxTriggers=4):
+    results, fails, _ = ggt(landRatioList, minTriggers,
                             maxTriggers, maxLibrary)
-    for i in tqdm.tqdm(range(minLibrary, maxLibrary, 1)):
-        result, fail, _ = ggt(minLands, maxLands, minTriggers, maxTriggers, i)
+    for librarySize in tqdm.tqdm(range(minLibrary, maxLibrary, 1)):
+        result, fail, _ = ggt(landRatioList, minTriggers,
+                              maxTriggers, librarySize)
         fails += fail
         for row_index, row in enumerate(result):
             for col_index, value in enumerate(row):
@@ -408,12 +433,22 @@ def sim_multiple_deck_sizes(minLands, maxLands, minLibrary, maxLibrary, minTrigg
             results[row_index][k] = round(
                 value / (maxLibrary - minLibrary + 1), 1)
 
-    return results, fails, (maxLibrary - minLibrary + 1) * (maxLands - minLands) * (maxTriggers - minTriggers) * sim_count
+    return results, fails, (maxLibrary - minLibrary + 1) * len(landRatioList) * (maxTriggers - minTriggers) * sim_count
 
 
 if __name__ == "__main__":
     # results, fails, total_sim_count = ggt(22, 29, 1, 4, 85)
     sim_count = 1000
-    results, fails, total_sim_count = sim_multiple_deck_sizes(22, 29, 65, 85)
+    landRatioList = []
+    startTime = time.time()
 
-    display_results(results, fails, total_sim_count)
+    for librarySize in range(22, 29):
+        landRatioList.append(librarySize / 85)
+
+    results, fails, total_sim_count = sim_multiple_deck_sizes(
+        landRatioList, 65, 85)
+
+    print(
+        f'\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time.time() - startTime, 2)} secs.\n')
+    display_results(results, fails, total_sim_count,
+                    (max(landRatioList), min(landRatioList)))
