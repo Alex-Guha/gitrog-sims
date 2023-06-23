@@ -389,19 +389,21 @@ def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
     return result, fails, len(landRatioList) * (maxTriggers - minTriggers) * sim_count
 
 
-def display_results(results, fails, total_sim_count, landRatios, minTriggers=1, maxTriggers=4):
+def display_results(results, fails, total_sim_count, landRatioList, minTriggers=1, maxTriggers=4):
     titleString = "Trigs:\t  "
     for triggers in range(minTriggers, maxTriggers):  # Create title string
         titleString = titleString + str(triggers) + "     "
+    # print(titleString)
 
-    print(titleString)
+    # print('\n'.join([' '.join([str('{:5}').format(item) for item in row]) for row in results]))
     print('\n'.join(
-        [' '.join([str('{:5}').format(item) for item in row]) for row in results]))
+        ['\t'.join([str('{:3}').format(item) for item in row[1:]]) for row in results]))
+
     print(f'The first column is the (land count / library size) ratio.\n' +
-          f'I.e. for the max land ratio, 85 * {round(landRatios[0], 2)} = {round(landRatios[0]*85)} lands ' +
-          f'and 65 * {round(landRatios[0], 2)} = {round(landRatios[0]*65)} lands.\n' +
-          f'For the min land ratio, 85 * {round(landRatios[1], 2)} = {round(landRatios[1]*85)} lands ' +
-          f'and 65 * {round(landRatios[1], 2)} = {round(landRatios[1]*65)} lands.\n')
+          f'I.e. for the max land ratio, 85 * {round(max(landRatioList), 2)} = {round(max(landRatioList)*85)} lands ' +
+          f'and 65 * {round(max(landRatioList), 2)} = {round(max(landRatioList)*65)} lands.\n' +
+          f'For the min land ratio, 85 * {round(min(landRatioList), 2)} = {round(min(landRatioList)*85)} lands ' +
+          f'and 65 * {round(min(landRatioList), 2)} = {round(min(landRatioList)*65)} lands.\n')
 
     type_counts = Counter(fails)
     labels = list(type_counts.keys())
@@ -416,7 +418,8 @@ def display_results(results, fails, total_sim_count, landRatios, minTriggers=1, 
 def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1, maxTriggers=4):
     results, fails, _ = ggt(landRatioList, minTriggers,
                             maxTriggers, maxLibrary)
-    for librarySize in tqdm.tqdm(range(minLibrary, maxLibrary, 1)):
+    # for librarySize in tqdm.tqdm(range(minLibrary, maxLibrary, 1)):
+    for librarySize in range(minLibrary, maxLibrary, 1):
         result, fail, _ = ggt(landRatioList, minTriggers,
                               maxTriggers, librarySize)
         fails += fail
@@ -437,18 +440,26 @@ def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1
 
 
 if __name__ == "__main__":
-    # results, fails, total_sim_count = ggt(22, 29, 1, 4, 85)
-    sim_count = 1000
+    # sim_count = 10
     landRatioList = []
-    startTime = time.time()
 
     for librarySize in range(22, 29):
         landRatioList.append(librarySize / 85)
 
+    startTime = time.time()
     results, fails, total_sim_count = sim_multiple_deck_sizes(
         landRatioList, 65, 85)
 
     print(
-        f'\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time.time() - startTime, 2)} secs.\n')
-    display_results(results, fails, total_sim_count,
-                    (max(landRatioList), min(landRatioList)))
+        f'\nBase case\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time.time() - startTime, 2)} secs.\n')
+    display_results(results, fails, total_sim_count, landRatioList)
+
+    for i in tqdm.tqdm(range(10, 21)):
+        shuffle_if_under = i
+        startTime = time.time()
+        results, fails, total_sim_count = sim_multiple_deck_sizes(
+            landRatioList, 65, 85)
+
+        print(
+            f'\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time.time() - startTime, 2)} secs.\n{shuffle_if_under}')
+        display_results(results, fails, total_sim_count, landRatioList)
