@@ -1,9 +1,9 @@
 # initial ideas co-opted from Spleenface's sim
 # Be warned, ye who enter: This has outgrown me and desparately needs refactoring.
 
-import random
-import time
-import tqdm
+from random import shuffle
+from time import time
+from tqdm import tqdm
 from collections import Counter
 
 # Hyperparameters
@@ -88,6 +88,16 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
         # add a trigger if we hit a land
         trigs += trig
 
+        # If we hit the second shuffler and the library doesn't have enough lands left to sustain dredging, shuffle up and continue dredging
+        # NOTE A normal player likely won't do this, so it might be worth removing
+        if 'shuffler' in found and first_shuffler_found and library.count('land') / len(library) < land_lib_ratio:
+            found_loam = False
+            first_shuffler_found = False
+            second_shuffler_found = False
+            library = createLib(landsInLib, librarySize)
+            shuffle(library)
+            continue
+
         # Keep track of if the first shuffle trigger is on the stack
         if 'shuffler' in found and not first_shuffler_found:
             first_shuffler_found = True
@@ -96,20 +106,12 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
         if 'shuffler' in found and first_shuffler_found:
             second_shuffler_found = True
 
-        if 'shuffler' in found and first_shuffler_found and library.count('land') / len(library) < land_lib_ratio:
-            found_loam = False
-            first_shuffler_found = False
-            second_shuffler_found = False
-            library = createLib(landsInLib, librarySize)
-            random.shuffle(library)
-            continue
-
         if 'shuffler' in found and len(library) <= shuffle_if_under:
             found_loam = False
             first_shuffler_found = False
             second_shuffler_found = False
             library = createLib(landsInLib, librarySize)
-            random.shuffle(library)
+            shuffle(library)
             continue
 
         # TODO We could opt to use loam if we have it here instead
@@ -137,7 +139,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
                 # TODO Account for drawing a shuffler here (modify how createLib works)
 
             library = createLib(landsInLib, librarySize)
-            random.shuffle(library)
+            shuffle(library)
             continue
 
         # got through whole library
@@ -158,6 +160,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
 
                 trigs += trig
 
+                # TODO Refactor how this works, not that we are keeping track of both shufflers
                 instances_of_shuffler = 0
                 for item in found:
                     if item == 'shuffler':
@@ -189,7 +192,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
                                 first_shuffler_found = False
                                 second_shuffler_found = False
                                 library = createLib(landsInLib, librarySize)
-                                random.shuffle(library)
+                                shuffle(library)
                                 continue
                         else:
                             return 1
@@ -256,7 +259,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
                                 first_shuffler_found = False
                                 second_shuffler_found = False
                                 library = createLib(landsInLib, librarySize)
-                                random.shuffle(library)
+                                shuffle(library)
                                 continue
                         else:
                             return 5
@@ -280,7 +283,17 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
                         elif card == 'nonland':
                             return 9
 
-                    # TODO determine if the odds are better to just shuffle up instead of drawing
+                    # The odds are better to shuffle up than to risk a 50/50
+                    # NOTE: a normal player would not count the ratio
+                    elif trigs == 1 and landsInLib / librarySize < 0.29:
+                        found_loam = False
+                        first_shuffler_found = False
+                        second_shuffler_found = False
+                        library = createLib(landsInLib, librarySize)
+                        shuffle(library)
+                        continue
+
+                    # The odds are better to risk the 50/50
                     elif trigs == 1:
                         trigs -= 1
                         card = library.pop(0)
@@ -324,7 +337,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
                     # TODO Account for drawing a shuffler here (modify how createLib works)
 
                 library = createLib(landsInLib, librarySize)
-                random.shuffle(library)
+                shuffle(library)
                 continue
 
             # If we have triggers but either no loam or the library is too small, and both shufflers are in the remaining cards, we have no option but to draw
@@ -353,11 +366,12 @@ def sim(trigs, originalLibSize, landsInLib, librarySize):
 
     # Run the simulation x times
     for i in range(sim_count):
-        random.shuffle(library)
+        shuffle(library)
 
-        # Sum the number of times the sim hit dakmor
+        # Do the actual sim
         result = handle_dredge(library.copy(), trigs, landsInLib, librarySize)
 
+        # Tabulate results
         if result == 0:
             succ += 1
         else:
@@ -372,11 +386,11 @@ def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
     result = []
     fails = []
 
-    # for numLands in tqdm.tqdm(range(minLands, maxLands)):
+    # TODO Add multithreading
     for i, landRatio in enumerate(landRatioList):
         numLands = round(landRatio * librarySize)
 
-        # Used to display the "numLands: "
+        # Used when displaying results
         result.append([f"{round(landRatio, 2)}:  "])
 
         # We can restart the dredging with draw triggers we generate, if we hit no lands on a mill.
@@ -385,6 +399,7 @@ def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
 
             simResult, simFails = sim(
                 triggers, librarySize, numLands, librarySize)
+
             fails += simFails
             result[i].append(simResult)
 
@@ -413,14 +428,14 @@ def display_results(results, fails, total_sim_count, landRatioList, minTriggers=
 
     for label, value in sorted(zip(labels, values)):
         print(f'Failure type: {label},\t' +
-              f'Occurrences frequency: {round(value * 100 / total_sim_count, 2)}, \t' +
+              f'Occurrence frequency: {round(value * 100 / total_sim_count, 2)}, \t' +
               f'Count (out of {total_sim_count:,}): {value:,}')
 
 
 def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1, maxTriggers=4):
     results, fails, _ = ggt(landRatioList, minTriggers,
                             maxTriggers, maxLibrary)
-    for librarySize in tqdm.tqdm(range(minLibrary, maxLibrary, 1)):
+    for librarySize in tqdm(range(minLibrary, maxLibrary, 1)):
         # for librarySize in range(minLibrary, maxLibrary, 1):
         result, fail, _ = ggt(landRatioList, minTriggers,
                               maxTriggers, librarySize)
@@ -448,10 +463,10 @@ if __name__ == "__main__":
     for librarySize in range(22, 29):
         landRatioList.append(librarySize / 85)
 
-    startTime = time.time()
+    startTime = time()
     results, fails, total_sim_count = sim_multiple_deck_sizes(
         landRatioList, 65, 85)
 
     print(
-        f'\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time.time() - startTime, 2)} secs.\n')
+        f'\nThis is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time() - startTime, 2)} secs.\n')
     display_results(results, fails, total_sim_count, landRatioList)
