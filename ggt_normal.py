@@ -1,5 +1,7 @@
 # initial ideas and initial code structure co-opted from Spleenface's sim
 # Be warned, ye who enter: This has outgrown me and desparately needs refactoring.
+# ggt_normal was made with a rule in mind that the player cannot fall below having 1 card in lib at any time, to prevent opponents from forcing drawing out,
+#   and also removing some things that the average player certainly won't do
 
 from random import shuffle
 from multiprocessing import Pool
@@ -10,8 +12,6 @@ from time import time
 land_lib_ratio = 0.1
 # The number of sims to use to generate each number (This should be set here and not changed elsewhere, for multiprocessing)
 sim_count = 1000000
-# This sets the number of cards left in library at which we shuffle if we hit a shuffler
-shuffle_if_under = 7
 
 
 # Milling helper function
@@ -90,6 +90,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
         trigs += trig
 
         # If we hit the second shuffler and the library doesn't have enough lands left to sustain dredging, shuffle up and continue dredging
+        # NOTE A normal player likely won't do this, so it might be worth removing
         if 'shuffler' in found and first_shuffler_found and library.count('land') / len(library) < land_lib_ratio:
             found_loam = False
             first_shuffler_found = False
@@ -107,7 +108,7 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
             second_shuffler_found = True
 
         # If we hit a shuffler and the library has fewer than 7 cards left, shuffle up. The odds for loaming are not good.
-        if 'shuffler' in found and len(library) <= shuffle_if_under:
+        if 'shuffler' in found and len(library) <= 7:
             found_loam = False
             first_shuffler_found = False
             second_shuffler_found = False
@@ -116,13 +117,13 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
             continue
 
         # If there are 6 or 7 cards left in library, we want to shuffle up (dredging here would result in an opponent being able to force us to draw)
-        if len(library) == 6:
+        if len(library) <= 7:
 
             # If we hit a land off the last mill, we have to consume that draw trigger before shuffling
             if trig > 0:
 
                 # If we have loam available, dredge it
-                if found_loam:
+                if found_loam and len(library) > 5:
                     trigs -= 1
                     library, trig, found = dredge(3, library)  # Dredge Loam
                     librarySize -= 1
@@ -182,220 +183,6 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
             library = createLib(landsInLib, librarySize)
             shuffle(library)
             continue
-
-        # XXX got through whole library
-        if len(library) < 6:
-
-            # If we have enough draw triggers to draw the remaining cards, do so
-            if trigs >= len(library):
-                return (1, 2)
-
-            # If we're out of triggers, gg
-            elif trigs == 0:
-                return (0, 2)
-
-            # This is the only case where you would dredge loam
-            # TODO Unify the two loam cases
-            elif trigs > 0 and len(library) == 5 and found_loam and not second_shuffler_found:
-                trigs -= 1
-                library, trig, found = dredge(3, library)  # Dredge Loam
-                librarySize -= 1
-
-                trigs += trig
-
-                # TODO Refactor how this works, now that we are keeping track of both shufflers
-                instances_of_shuffler = 0
-                for item in found:
-                    if item == 'shuffler':
-                        instances_of_shuffler += 1
-
-                # There is a shuffler in the next 2 cards
-                if 'dakmor' in found and instances_of_shuffler != 2 and not first_shuffler_found:
-                    return (1, 3)
-
-                # If there is a land in the last 2, we cannot take dakmor or we mill ourselves
-                elif 'dakmor' in found and instances_of_shuffler == 2:
-                    if 'land' in library:
-                        # If we still have draw triggers, we can resolve one, shuffle up, and go back to dredging ggt
-                        if trigs > 0:
-                            trigs -= 1
-                            card = library.pop(0)
-                            if card == 'land':
-                                trigs += 1
-                                starting_trigs += 1
-                                landsInLib -= 1
-                                librarySize -= 1
-                            elif card == 'nonland':
-                                librarySize -= 1
-
-                            if trigs == 0:
-                                return (0, 3)
-                            else:
-                                first_shuffler_found = False
-                                second_shuffler_found = False
-                                library = createLib(landsInLib, librarySize)
-                                shuffle(library)
-                                continue
-                        else:
-                            return (0, 3)
-                    else:
-                        return (1, 3)
-
-                # Dakmor is in the last two, risk it for the draw
-                elif instances_of_shuffler > 0 and trigs > 0:
-                    if trigs >= 2:
-                        return (1, 3)
-                    trigs -= 1
-                    card = library.pop(0)
-                    if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return (1, 3)
-                    elif card == 'land':  # Found new fodder to discard
-                        return (1, 3)
-                    return (0, 3)  # Out of draws
-
-                # The last shuffler and dakmor are the last 2 cards, and we have enough draw triggers to get them both
-                elif instances_of_shuffler == 0 and trigs >= 2:
-                    return (1, 3)
-
-                # The last shuffler and dakmor are the last 2 cards, risk it for the draw
-                elif instances_of_shuffler == 0 and trigs == 1:
-                    trigs -= 1
-                    card = library.pop(0)
-                    if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return (1, 3)
-                    return (0, 3)  # Out of draws
-
-                # The last shuffler and dakmor are the last 2 cards, but there's nothing we can do
-                elif instances_of_shuffler == 0 and trigs == 0:
-                    return (0, 3)  # Out of draws
-
-                # Out of draws
-                else:
-                    return (0, 3)
-
-            elif trigs > 0 and len(library) == 5 and found_loam and second_shuffler_found:
-                trigs -= 1
-                library, trig, found = dredge(3, library)  # Dredge Loam
-                librarySize -= 1
-
-                trigs += trig
-
-                # If we milled dakmor | there is a land in the last 2 cards in library, we cannot take dakmor
-                if 'dakmor' in found:
-                    if 'land' in library:
-                        # If we still have draw triggers, we can resolve one, shuffle up, and go back to dredging ggt
-                        if trigs > 0:
-                            trigs -= 1
-                            card = library.pop(0)
-                            if card == 'land':
-                                trigs += 1
-                                starting_trigs += 1
-                                landsInLib -= 1
-                                librarySize -= 1
-                            elif card == 'nonland':
-                                librarySize -= 1
-
-                            if trigs == 0:
-                                return (0, 4)
-                            else:
-                                first_shuffler_found = False
-                                second_shuffler_found = False
-                                library = createLib(landsInLib, librarySize)
-                                shuffle(library)
-                                continue
-                        else:
-                            return (0, 4)
-                    else:
-                        return (1, 4)
-
-                # We did not mill dakmor | it is in the last 2 cards, we can try to draw it
-                elif trigs > 0:
-                    # We have enough draw triggers to draw both
-                    if trigs >= 2:
-                        return (1, 4)
-
-                    # Forced to draw, trig = 1 implies trigs = 1 here
-                    elif trig == 1:
-                        trigs -= 1
-                        card = library.pop(0)
-                        if card == 'dakmor':
-                            return (1, 4)
-                        elif card == 'land':
-                            return (1, 4)
-                        elif card == 'nonland':
-                            return (0, 4)
-
-                    # The odds are better to shuffle up than to risk a 50/50
-                    # NOTE: a normal player would not count the ratio
-                    elif trigs == 1 and landsInLib / librarySize < 0.29:
-                        first_shuffler_found = False
-                        second_shuffler_found = False
-                        library = createLib(landsInLib, librarySize)
-                        shuffle(library)
-                        continue
-
-                    # The odds are better to risk the 50/50
-                    elif trigs == 1:
-                        trigs -= 1
-                        card = library.pop(0)
-                        if card == 'dakmor':
-                            return (1, 4)
-                        elif card == 'land':
-                            return (1, 4)
-                        elif card == 'nonland':
-                            return (0, 4)
-
-                    # no draws left, gg
-                    else:
-                        return (0, 4)
-
-                # We do not have any more draw triggers
-                else:
-                    return (0, 4)
-
-            # If we've already passed a shuffler, we can resolve remining draws on the stack and shuffle up and go back to ggt
-            elif first_shuffler_found:
-
-                # If we hit a land off the last mill, we must draw one to continue.
-                if trig > 0:
-                    trigs -= 1
-                    card = library.pop(0)
-                    if card == 'dakmor':
-                        return (1, 5)
-                    elif card == 'land':
-                        trigs += 1
-                        starting_trigs += 1
-                        landsInLib -= 1
-                        librarySize -= 1
-                    elif card == 'nonland':
-                        librarySize -= 1
-                    elif card == 'loam':
-                        found_loam = True
-                        librarySize -= 1
-                    # TODO Account for drawing a shuffler here (modify how createLib works)
-
-                if trigs == 0:
-                    return (0, 5)
-
-                found_loam = False
-                first_shuffler_found = False
-                second_shuffler_found = False
-                library = createLib(landsInLib, librarySize)
-                shuffle(library)
-                continue
-
-            # TODO If we have triggers but either no loam or the library is too small, and both shufflers are in the remaining cards, we have no option but to draw
-            elif trigs > 0:
-                while trigs > 0:
-                    trigs -= 1
-
-                    card = library.pop(0)
-                    if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return (1, 6)
-                    elif card == 'land':  # Found new fodder to discard
-                        trigs += 1
-                    # If hit shuffler or nonland, do nothing
-                return (0, 6)  # Out of draws
 
     return (0, 0)  # failed
 
