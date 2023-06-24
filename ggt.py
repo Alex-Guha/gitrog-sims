@@ -479,8 +479,8 @@ def display_results(results, stats, total_sim_count, landRatioList, minTriggers=
     for key in sorted(stat_dict.keys()):
         print(f'Stat number: {key},\t' +
               f'Percent occurrence: {round((stat_dict[key][0] + stat_dict[key][1]) * 100 / total_sim_count, 2)},\n\t' +
-              f'Success count (out of {total_sim_count:,}): {stat_dict[key][1]:,}\n\t' +
-              f'Failure count (out of {total_sim_count:,}): {stat_dict[key][0]:,}\n\t' +
+              f'Success count: {stat_dict[key][1]:,}\n\t' +
+              f'Failure count: {stat_dict[key][0]:,}\n\t' +
               f'Success rate: {round(stat_dict[key][1]/(stat_dict[key][0] + stat_dict[key][1]), 2)}')
 
 

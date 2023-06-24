@@ -8,10 +8,8 @@ from multiprocessing import Pool
 from time import time
 
 # Hyperparameters
-# The ratio of (lands in library / library size) where shuffling at the second shuffler is better than continuing to mill past
-land_lib_ratio = 0.1
 # The number of sims to use to generate each number (This should be set here and not changed elsewhere, for multiprocessing)
-sim_count = 1000000
+sim_count = 10000
 
 
 # Milling helper function
@@ -62,8 +60,6 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
 
     # Used to keep track of whether things are in the graveyard or not
     found_loam = False
-    first_shuffler_found = False
-    second_shuffler_found = False
 
     # while we still have a draw trigger
     while trigs > 0:
@@ -89,29 +85,9 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
         # add a trigger if we hit a land
         trigs += trig
 
-        # If we hit the second shuffler and the library doesn't have enough lands left to sustain dredging, shuffle up and continue dredging
-        # NOTE A normal player likely won't do this, so it might be worth removing
-        if 'shuffler' in found and first_shuffler_found and library.count('land') / len(library) < land_lib_ratio:
-            found_loam = False
-            first_shuffler_found = False
-            second_shuffler_found = False
-            library = createLib(landsInLib, librarySize)
-            shuffle(library)
-            continue
-
-        # Keep track of if the first shuffle trigger is on the stack
-        if 'shuffler' in found and not first_shuffler_found:
-            first_shuffler_found = True
-
-        # Keep track of if the second shuffle trigger is on the stack
-        if 'shuffler' in found and first_shuffler_found:
-            second_shuffler_found = True
-
         # If we hit a shuffler and the library has fewer than 7 cards left, shuffle up. The odds for loaming are not good.
         if 'shuffler' in found and len(library) <= 7:
             found_loam = False
-            first_shuffler_found = False
-            second_shuffler_found = False
             library = createLib(landsInLib, librarySize)
             shuffle(library)
             continue
@@ -136,8 +112,6 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
 
                     # If we hit a shuffler, great
                     elif 'shuffler' in found:
-                        first_shuffler_found = False
-                        second_shuffler_found = False
                         library = createLib(landsInLib, librarySize)
                         shuffle(library)
                         continue
@@ -178,8 +152,6 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
             if trigs == 0:
                 return (0, 1)
 
-            first_shuffler_found = False
-            second_shuffler_found = False
             library = createLib(landsInLib, librarySize)
             shuffle(library)
             continue
@@ -266,8 +238,8 @@ def display_results(results, stats, total_sim_count, landRatioList, minTriggers=
     for key in sorted(stat_dict.keys()):
         print(f'Stat number: {key},\t' +
               f'Percent occurrence: {round((stat_dict[key][0] + stat_dict[key][1]) * 100 / total_sim_count, 2)},\n\t' +
-              f'Success count (out of {total_sim_count:,}): {stat_dict[key][1]:,}\n\t' +
-              f'Failure count (out of {total_sim_count:,}): {stat_dict[key][0]:,}\n\t' +
+              f'Success count: {stat_dict[key][1]:,}\n\t' +
+              f'Failure count: {stat_dict[key][0]:,}\n\t' +
               f'Success rate: {round(stat_dict[key][1]/(stat_dict[key][0] + stat_dict[key][1]), 2)}')
 
 
