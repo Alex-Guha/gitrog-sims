@@ -9,7 +9,7 @@ from time import time
 
 # Hyperparameters
 # The number of sims to use to generate each number (This should be set here and not changed elsewhere, for multiprocessing)
-sim_count = 10000
+sim_count = 1000000
 
 
 # Milling helper function
@@ -23,9 +23,6 @@ def dredge(amount, library):
 
         elif card == "land":  # found a land
             trig = 1
-
-        elif card == 'loam':
-            found.append('loam')
 
         elif card == 'shuffler':
             found.append('shuffler')
@@ -44,10 +41,9 @@ def createLib(lands, size):
     library.append("dakmor")  # add dakmor
     library.append("shuffler")  # add 2 shufflers
     library.append("shuffler")
-    library.append("loam")
 
-    # number of cards in library - number of lands - 4 for dakmor, 2 shufflers, and loam
-    for j in range(size - lands - 4):
+    # number of cards in library - number of lands - 3 for dakmor and 2 shufflers
+    for j in range(size - lands - 3):
         library.append("nonland")
 
     return library
@@ -57,9 +53,6 @@ def createLib(lands, size):
 def handle_dredge(library, trigs, landsInLib, librarySize):
     # Used as a tally to add back lands when a starting trigger is used
     starting_trigs = trigs
-
-    # Used to keep track of whether things are in the graveyard or not
-    found_loam = False
 
     # while we still have a draw trigger
     while trigs > 0:
@@ -78,75 +71,32 @@ def handle_dredge(library, trigs, landsInLib, librarySize):
         if 'dakmor' in found:
             return (1, 0)
 
-        # Keep track of if we have loam in the grave
-        elif 'loam' in found:
-            found_loam = True
-
         # add a trigger if we hit a land
         trigs += trig
 
         # If we hit a shuffler and the library has fewer than 7 cards left, shuffle up. The odds for loaming are not good.
         if 'shuffler' in found and len(library) <= 7:
-            found_loam = False
             library = createLib(landsInLib, librarySize)
             shuffle(library)
             continue
 
-        # If there are 6 or 7 cards left in library, we want to shuffle up (dredging here would result in an opponent being able to force us to draw)
+        # If there are 7 or fewer cards left in library, we want to shuffle up (dredging here would result in an opponent being able to force us to draw)
         if len(library) <= 7:
 
             # If we hit a land off the last mill, we have to consume that draw trigger before shuffling
             if trig > 0:
-
-                # If we have loam available, dredge it
-                if found_loam and len(library) > 5:
-                    trigs -= 1
-                    library, trig, found = dredge(3, library)  # Dredge Loam
+                # We must draw one
+                trigs -= 1
+                card = library.pop(0)
+                if card == 'dakmor':
+                    return (1, 1)
+                elif card == 'land':
+                    trigs += 1
+                    starting_trigs += 1
+                    landsInLib -= 1
                     librarySize -= 1
-
-                    trigs += trig
-
-                    # If we hit dakmor, then we're set
-                    if 'dakmor' in found:
-                        return (1, 1)
-
-                    # If we hit a shuffler, great
-                    elif 'shuffler' in found:
-                        library = createLib(landsInLib, librarySize)
-                        shuffle(library)
-                        continue
-
-                    # If we hit a land off loam, we must draw
-                    elif trig == 1:
-                        trigs -= 1
-                        card = library.pop(0)
-                        if card == 'dakmor':
-                            return (1, 1)
-                        elif card == 'land':
-                            trigs += 1
-                            starting_trigs += 1
-                            landsInLib -= 1
-                            librarySize -= 1
-                        elif card == 'nonland':
-                            librarySize -= 1
-                        # TODO Account for drawing a shuffler here (modify how createLib works)
-
-                # If we don't have loam, we must draw one
-                else:
-                    trigs -= 1
-                    card = library.pop(0)
-                    if card == 'dakmor':
-                        return (1, 1)
-                    elif card == 'land':
-                        trigs += 1
-                        starting_trigs += 1
-                        landsInLib -= 1
-                        librarySize -= 1
-                    elif card == 'nonland':
-                        librarySize -= 1
-                    elif card == 'loam':
-                        found_loam = True
-                        librarySize -= 1
+                elif card == 'nonland':
+                    librarySize -= 1
                     # TODO Account for drawing a shuffler here (modify how createLib works)
 
             if trigs == 0:
