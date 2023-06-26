@@ -22,6 +22,7 @@ def dredge(amount, library):
         card = library.pop(0)
         if card == "dakmor":  # found dakmor
             found.append('dakmor')
+            trig = 1
 
         elif card == "land":  # found a land
             trig = 1

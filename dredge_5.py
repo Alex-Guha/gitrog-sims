@@ -1,21 +1,24 @@
-# some parts co-opted from Spleenface
+# initial ideas and initial code structure co-opted from Spleenface's sim
+# Be warned, ye who enter: This has outgrown me and desparately needs refactoring.
 
-import random
-import tqdm
-from collections import Counter
+from random import shuffle
+from multiprocessing import Pool
+from time import time
 
-landsInLib = 0
-libSize = 0
+# Hyperparameters
+# The number of sims to use to generate each number (This should be set here and not changed elsewhere, for multiprocessing)
+sim_count = 10000
 
 
-def dredge(amt, lib):
+# Milling helper function
+def dredge(amount, library):
     trig = 0
     found = []
-    for i in range(amt):  # take the first X out of the library
-        card = lib.pop(0)
+    for i in range(amount):  # take the first X out of the library
+        card = library.pop(0)
         if card == "dakmor":  # found dakmor
-            # Only dakmor is relevant as the loop ends
-            return (0, 0, ['dakmor'])
+            found.append('dakmor')
+            trig = 1
 
         elif card == "land":  # found a land
             trig = 1
@@ -23,182 +26,257 @@ def dredge(amt, lib):
         elif card == 'shuffler':
             found.append('shuffler')
 
-    return lib, trig, found
+    return library, trig, found
 
 
+# Library making helper function
 def createLib(lands, size):
-    lib = []  # empty library
-    for i in range(lands):  # add the requisite number of lands
-        lib.append("land")
-    lib.append("dakmor")  # add dakmor
-    lib.append("shuffler")  # add 1 shuffler
-    # number of cards in library - number of lands - 2 for dakmor and 1 shuffler
-    for j in range(size - lands - 2):
-        lib.append("nonland")
-    return lib
+    library = []
+
+    # add the requisite number of lands
+    for i in range(lands):
+        library.append("land")
+
+    library.append("dakmor")  # add dakmor
+    library.append("shuffler")  # add shuffler
+    library.append("brownscale")
+
+    # number of cards in library - number of lands - 3 for dakmor, brownscale, and shuffler
+    for j in range(size - lands - 3):
+        library.append("nonland")
+
+    return library
 
 
-# Accepts a shuffled array representing the library, and the number of triggers we can generate
-def handle_dredge(lib, trigs):
-    global landsInLib
-    global libSize
+# The sim
+def handle_dredge(library, trigs, landsInLib, librarySize):
+    # Used as a tally to add back lands when a starting trigger is used
     starting_trigs = trigs
-    first_shuffler_found = False
 
-    while trigs > 0:  # while you still have a draw trigger
+    # while we still have a draw trigger
+    while trigs > 0:
         trigs -= 1  # remove a trigger for dredging
 
+        # If we used a starting trigger, add a land back to the land count and library size
         if trigs < starting_trigs:
             starting_trigs -= 1
             landsInLib += 1
-            libSize += 1
+            librarySize += 1
 
-        lib, trig, found = dredge(5, lib)
+        # dredge ggt
+        library, trig, found = dredge(6, library)
 
-        if len(found) > 0 and found[0] == 'dakmor':
-            return 0
+        # If we hit dakmor, we're set. Cases where the library would be too small to take it are handled elsewhere.
+        if 'dakmor' in found:
+            return (1, 0)
 
-        trigs += trig  # add a trigger if we hit a land
+        # add a trigger if we hit a land
+        trigs += trig
 
-        if 'shuffler' in found and not first_shuffler_found:
-            first_shuffler_found = True
+        # If we hit a shuffler and the library has fewer than 7 cards left, shuffle up. The odds for loaming are not good.
+        if 'shuffler' in found:
+            library = createLib(landsInLib, librarySize)
+            shuffle(library)
+            continue
 
-        if len(lib) == 5 or len(lib) == 6:
-            print('draw case')
-            first_shuffler_found = False
+        # dakmor and shuffler are in last 4 cards
+        if len(library) < 5:
+            if trigs == 0:
+                return (0, 0)
 
-            # If we hit a land off the last mill, draw one.
+            library = createLib(landsInLib, librarySize)
+            shuffle(library)
+            continue
+
+    return (0, 0)  # failed
+
+
+def handle_dredge_6(library, trigs, landsInLib, librarySize):
+    # Used as a tally to add back lands when a starting trigger is used
+    starting_trigs = trigs
+
+    # while we still have a draw trigger
+    while trigs > 0:
+        trigs -= 1  # remove a trigger for dredging
+
+        # If we used a starting trigger, add a land back to the land count and library size
+        if trigs < starting_trigs:
+            starting_trigs -= 1
+            landsInLib += 1
+            librarySize += 1
+
+        # dredge ggt
+        library, trig, found = dredge(6, library)
+
+        # If we hit dakmor, we're set. Cases where the library would be too small to take it are handled elsewhere.
+        if 'dakmor' in found:
+            return (1, 0)
+
+        # add a trigger if we hit a land
+        trigs += trig
+
+        # If we hit a shuffler and the library has fewer than 7 cards left, shuffle up. The odds for loaming are not good.
+        if 'shuffler' in found and len(library) <= 7:
+            library = createLib(landsInLib, librarySize)
+            shuffle(library)
+            continue
+
+        # If there are 7 or fewer cards left in library, we want to shuffle up (dredging here would result in an opponent being able to force us to draw)
+        if len(library) < 6:
+
+            # If we hit a land off the last mill, we have to consume that draw trigger before shuffling
             if trig > 0:
+                # We must draw one
                 trigs -= 1
-                card = lib.pop(0)
+                card = library.pop(0)
                 if card == 'dakmor':
-                    return 0
+                    return (1, 1)
                 elif card == 'land':
                     trigs += 1
                     starting_trigs += 1
                     landsInLib -= 1
-                    libSize -= 1
+                    librarySize -= 1
                 elif card == 'nonland':
-                    libSize -= 1
-                # TODO Account for drawing a shuffler here (modify how createLib works)
-
-            lib = createLib(landsInLib, libSize)
-            random.shuffle(lib)
-            continue
-
-        # got through whole library
-        if len(lib) < 5:
-
-            if first_shuffler_found:
-                first_shuffler_found = False
-
-                # If we hit a land off the last mill, draw one.
-                if trig > 0:
-                    trigs -= 1
-                    card = lib.pop(0)
-                    if card == 'dakmor':
-                        return 0
-                    elif card == 'land':
-                        trigs += 1
-                        starting_trigs += 1
-                        landsInLib -= 1
-                        libSize -= 1
-                    elif card == 'nonland':
-                        libSize -= 1
+                    librarySize -= 1
                     # TODO Account for drawing a shuffler here (modify how createLib works)
 
-                lib = createLib(landsInLib, libSize)
-                random.shuffle(lib)
-                continue
+            if trigs == 0:
+                return (0, 1)
 
-            elif trigs > 0:  # If we do not have loam, draw one
-                while trigs > 0:
-                    trigs -= 1
+            library = createLib(landsInLib, librarySize)
+            shuffle(library)
+            continue
 
-                    card = lib.pop(0)
-                    if card == 'dakmor':  # GGEZ wasn't even close btw #calculated
-                        return 0
-                    elif card == 'land':  # Found new fodder to discard
-                        trigs += 1
-                    # If hit shuffler or nonland, do nothing
-                return 6  # Out of draws
+    return (0, 0)  # failed
 
-    return 7  # failed
+# Actually runs the sims
 
 
-# Accepts a number of lands in the library, size of the library, and number of triggers we can generate
-def sim(trigs, originalLibSize, originalLandCount):
-    global landsInLib
-    global libSize
+def sim(trigs, originalLibSize, landsInLib, librarySize):
     succ = 0
-    fails = []
+    stats = []
 
     # Creates the library as a shuffled array containing 'l' for land, 'd' for dakmor, and 'n' for nonland
-    lib = createLib(landsInLib, libSize)
+    library = createLib(landsInLib, librarySize)
 
-    # Run the simulation 1000 times
-    for i in range(1000000):
-        libSize = originalLibSize
-        landsInLib = originalLandCount
+    # Run the simulation x times
+    for i in range(sim_count):
+        shuffle(library)
 
-        random.shuffle(lib)
+        # Do the actual sim
+        result = handle_dredge(library.copy(), trigs, landsInLib, librarySize)
 
-        # Sum the number of times the sim hit dakmor
-        result = handle_dredge(lib.copy(), trigs)
+        # Tabulate results
+        succ += result[0]
 
-        if result == 0:
-            succ += 1
-        else:
-            fails.append(result)
+        stats.append(result)
 
     # Return the success rate as a percentage
-    return round(succ / 10000, 1), fails
+    return succ / (sim_count / 100), stats
 
 
-# Accepts a range of lands remaining in the deck, number of draw triggers we can generate separately, and library size
-def ggt(minLands, maxLands, minTriggers, maxTriggers, librarySize):
-    global landsInLib
-    global libSize
+# Intermediary sim
+def ggt(landRatioList, minTriggers, maxTriggers, librarySize):
     result = []
-    fails = []
-    libSize = librarySize
+    stats = []
 
-    for numLands in tqdm.tqdm(range(minLands, maxLands)):
+    for i, landRatio in enumerate(landRatioList):
+        numLands = round(landRatio * librarySize)
 
-        # Used to display the "numLands: "
-        result.append([str(numLands) + ":  "])
+        # Used when displaying results
+        result.append([f"{round(landRatio, 2)}:  "])
 
         # We can restart the dredging with draw triggers we generate, if we hit no lands on a mill.
         # The number of such triggers we can generate is this range.
         for triggers in range(minTriggers, maxTriggers):
-            libSize = librarySize
-            landsInLib = numLands
 
-            simResult, simFails = sim(triggers, librarySize, numLands)
-            fails += simFails
-            result[numLands - minLands].append(simResult)
+            simResult, simStats = sim(
+                triggers, librarySize, numLands, librarySize)
 
-    # Display the results
-    titleString = "Trigs:  "
+            stats += simStats
+            result[i].append(simResult)
+
+    return (result, stats, len(landRatioList) * (maxTriggers - minTriggers) * sim_count)
+
+
+def display_results(results, stats, total_sim_count, landRatioList, minTriggers=1, maxTriggers=4):
+    titleString = "Trigs:\t  "
     for triggers in range(minTriggers, maxTriggers):  # Create title string
         titleString = titleString + str(triggers) + "     "
     print(titleString)
+
     print('\n'.join(
-        [' '.join([str('{:5}').format(item) for item in row])for row in result]))
+        [' '.join([str('{:5}').format(item) for item in row]) for row in results]))
+    # print('\n'.join(['\t'.join([str('{:3}').format(item) for item in row[1:]]) for row in results]))
 
-    # Print failure cases
-    type_counts = Counter(fails)
-    labels = list(type_counts.keys())
-    values = list(type_counts.values())
-    labels.reverse()
-    values.reverse()
+    print(f'The first column is the (land count / library size) ratio.\n' +
+          f'I.e. for the max land ratio, 85 * {round(max(landRatioList), 2)} = {round(max(landRatioList)*85)} lands ' +
+          f'and 65 * {round(max(landRatioList), 2)} = {round(max(landRatioList)*65)} lands.\n' +
+          f'For the min land ratio, 85 * {round(min(landRatioList), 2)} = {round(min(landRatioList)*85)} lands ' +
+          f'and 65 * {round(min(landRatioList), 2)} = {round(min(landRatioList)*65)} lands.\n')
 
-    for i, label in enumerate(labels):
-        print(f'Failure type: {label}, Occurrances: {values[i]}')
+    stat_dict = {}
+    for stat in stats:
+        result = stat[0]
+        location = stat[1]
+        if location in stat_dict:
+            stat_dict[location][result] += 1
+        else:
+            if result == 0:
+                stat_dict[location] = [1, 0]
+            else:
+                stat_dict[location] = [0, 1]
 
-    return result
+    for key in sorted(stat_dict.keys()):
+        print(f'Stat number: {key},\t' +
+              f'Percent occurrence: {round((stat_dict[key][0] + stat_dict[key][1]) * 100 / total_sim_count, 2)},\n\t' +
+              f'Success count: {stat_dict[key][1]:,}\n\t' +
+              f'Failure count: {stat_dict[key][0]:,}\n\t' +
+              f'Success rate: {round(stat_dict[key][1]/(stat_dict[key][0] + stat_dict[key][1]), 2)}')
+
+
+# Used to run a range of library sizes
+def sim_multiple_deck_sizes(landRatioList, minLibrary, maxLibrary, minTriggers=1, maxTriggers=4):
+    inputs = []
+    for librarySize in range(minLibrary, maxLibrary + 1, 1):
+        inputs.append((landRatioList, minTriggers, maxTriggers, librarySize))
+
+    # Multiprocessing
+    with Pool(processes=len(inputs)) as pool:
+        ggt_results = pool.starmap(ggt, inputs)
+
+    results = ggt_results[0][0]
+    stats = ggt_results[0][1]
+
+    for result in ggt_results[1:]:
+        stats += result[1]
+        for row_index, row in enumerate(result[0]):
+            for col_index, value in enumerate(row):
+                if col_index == 0:
+                    continue
+                results[row_index][col_index] += value
+
+    for row_index, row in enumerate(results):
+        for k, value in enumerate(row):
+            if k == 0:
+                continue
+            results[row_index][k] = round(
+                value / (maxLibrary - minLibrary + 1), 1)
+
+    return results, stats, (maxLibrary - minLibrary + 1) * len(landRatioList) * (maxTriggers - minTriggers) * sim_count
 
 
 if __name__ == "__main__":
-    # PARAMETERS - Change these to simulate whatever scenario you like
-    ggt(15, 31, 1, 4, 80)
+    landRatioList = []
+
+    # generate the land ratios by using land counts in an 85 card deck
+    for librarySize in range(22, 29):
+        landRatioList.append(librarySize / 85)
+
+    startTime = time()
+    results, stats, total_sim_count = sim_multiple_deck_sizes(
+        landRatioList, 65, 85)
+
+    print(
+        f'This is an average from a library size of 65 to 85.\nTotal number of sims: {total_sim_count:,}. Total time: {round(time() - startTime, 2)} secs.\n')
+    display_results(results, stats, total_sim_count, landRatioList)
