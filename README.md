@@ -39,11 +39,10 @@ when simmed was surprisingly minor: the first only fell behind by about 0.5-0.9
 percent on each result.
 
 The process for dredge tutoring in the [first version](https://github.com/TheGitrogServer/thegitrogserver.github.io/blob/main/docs/mathematical-proofs/ggt_normal.py)
-is more or less intuitive
-
-In the [second version](https://github.com/TheGitrogServer/thegitrogserver.github.io/blob/main/docs/mathematical-proofs/ggt.py)
-it gets a lot more complicated, with all kinds of edge cases when the library is
-6 cards and under. I won't write out the process unless asked to, though.
+is pretty basic, but in the [second version](https://github.com/TheGitrogServer/thegitrogserver.github.io/blob/main/docs/mathematical-proofs/ggt.py)
+it gets a lot more complicated with all kinds of edge cases when the library is
+6 cards and under. I won't write out the process, though - if you want to see it,
+feel free to poke around in the code.
 
 The output of the first version looks like this:
 ```
