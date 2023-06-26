@@ -79,3 +79,5 @@ from 65, 66, ..., 84, up to 85 were added and divided by 21 (85 - 65 is 20, but
 we add one as we include 85).
 
 We sim many times so that the percentages converge to their real value.
+
+-- Memento Mori / GitrogPancake
